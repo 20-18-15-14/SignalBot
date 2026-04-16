@@ -1,0 +1,15 @@
+services:
+  postgres:
+    restart: unless-stopped
+
+  signal-cli-rest-api:
+    restart: unless-stopped
+
+  app:
+    environment:
+      RUN_MIGRATIONS: "true"
+      UVICORN_RELOAD: "false"
+    restart: unless-stopped
+
+  worker:
+    restart: unless-stopped

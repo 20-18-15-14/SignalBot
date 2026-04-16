@@ -1,0 +1,67 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: signal_osint
+      POSTGRES_USER: signal
+      POSTGRES_PASSWORD: signal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U signal -d signal_osint"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  signal-cli-rest-api:
+    image: ${SIGNAL_CLI_IMAGE:-bbernhard/signal-cli-rest-api:latest}
+    environment:
+      MODE: "json-rpc"
+      AUTO_RECEIVE_SCHEDULE: "0"
+    ports:
+      - "8080:8080"
+    volumes:
+      - signal_state:/home/.local/share/signal-cli
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      RUN_MIGRATIONS: "true"
+      UVICORN_RELOAD: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      signal-cli-rest-api:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - ./knowledge:/app/knowledge
+
+  worker:
+    build: .
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      signal-cli-rest-api:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - ./knowledge:/app/knowledge
+    command: python -m app.workers.ingestion_worker
+
+volumes:
+  postgres_data:
+  signal_state:
