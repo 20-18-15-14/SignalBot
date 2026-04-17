@@ -1,11 +1,12 @@
 from app.core.config import Settings
-from app.services.providers.base import (
+from app.services.providers import (
+    PROVIDERS,
     ContextBlob,
     GenerationRequest,
     LLMProvider,
     StubProvider,
+    build_provider,
 )
-from app.services.providers.openai_provider import OpenAIProvider
 
 
 class AgentService:
@@ -13,18 +14,25 @@ class AgentService:
 
     Phase 1 of the multi-model migration: preserves the existing public contract
     (`answer()` returning `{text, sources, usage}`) while isolating provider-specific
-    logic behind `providers/`.
+    logic behind `providers/`. Provider selection is driven by the `default_provider`
+    setting and the registry in `app.services.providers.PROVIDERS`.
     """
 
     def __init__(self, settings: Settings, provider: LLMProvider | None = None):
         self.settings = settings
-        self.provider: LLMProvider = provider or self._default_provider(settings)
+        self.provider: LLMProvider = provider or self._resolve_provider(settings)
 
     @staticmethod
-    def _default_provider(settings: Settings) -> LLMProvider:
-        if settings.openai_api_key:
-            return OpenAIProvider(settings)
-        return StubProvider()
+    def _resolve_provider(settings: Settings) -> LLMProvider:
+        name = settings.default_provider
+        # If the requested provider is OpenAI but no key is configured, fall back to
+        # the stub so the app still boots. Any other named provider is built as-is
+        # and is responsible for reporting its own misconfiguration.
+        if name == "openai" and not settings.openai_api_key:
+            return StubProvider()
+        if name not in PROVIDERS:
+            return StubProvider()
+        return build_provider(name, settings)
 
     def answer(
         self,

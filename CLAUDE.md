@@ -46,6 +46,8 @@ Multi-model work replaces the body of `answer()` (and `build_input()`) with a pr
 
 Design details: `docs/MULTI_MODEL_DESIGN.md`.
 
+Adding a new provider (Anthropic, Gemini, Vertex, Ollama, etc.): see `docs/PROVIDERS.md`.
+
 ## Dev environment
 
 - Python 3.12

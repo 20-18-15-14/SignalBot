@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     database_url: str = "sqlite:///./signal_osint.db"
+    default_provider: str = "openai"
     openai_api_key: str = ""
     openai_model: str = "gpt-4.1"
     openai_embedding_model: str = "text-embedding-3-small"

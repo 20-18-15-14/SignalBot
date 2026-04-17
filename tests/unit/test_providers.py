@@ -1,7 +1,10 @@
 """Tests for the provider abstraction introduced in Phase 1 of the multi-model migration."""
 
+import pytest
+
 from app.core.config import Settings
 from app.services.agent import AgentService
+from app.services.providers import PROVIDERS, build_provider, register_provider
 from app.services.providers.base import (
     ContextBlob,
     GenerationRequest,
@@ -9,6 +12,7 @@ from app.services.providers.base import (
     LLMProvider,
     StubProvider,
 )
+from app.services.providers.openai_provider import OpenAIProvider
 
 
 def _settings(openai_key: str = "") -> Settings:
@@ -104,3 +108,63 @@ def test_stub_provider_matches_disabled_generation_substring():
 def test_llmprovider_protocol_is_satisfied_by_stub_and_recording_providers():
     assert isinstance(StubProvider(), LLMProvider)
     assert isinstance(_RecordingProvider(), LLMProvider)
+
+
+def test_openai_and_stub_are_registered_by_default():
+    assert "openai" in PROVIDERS
+    assert "stub" in PROVIDERS
+
+
+def test_build_provider_returns_configured_instance():
+    provider = build_provider("openai", _settings(openai_key="sk-fake"))
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.name == "openai"
+
+
+def test_build_provider_raises_for_unknown_name():
+    with pytest.raises(KeyError):
+        build_provider("does-not-exist", _settings())
+
+
+def test_register_provider_makes_it_buildable():
+    name = "pytest-recording"
+
+    def factory(_settings):
+        return _RecordingProvider()
+
+    try:
+        register_provider(name, factory)
+        provider = build_provider(name, _settings())
+        assert isinstance(provider, _RecordingProvider)
+    finally:
+        PROVIDERS.pop(name, None)
+
+
+def test_agent_falls_back_to_stub_when_default_provider_is_unknown():
+    settings = _settings()
+    settings.default_provider = "not-registered"
+    agent = AgentService(settings)
+    assert isinstance(agent.provider, StubProvider)
+
+
+def test_agent_falls_back_to_stub_when_openai_default_has_no_key():
+    settings = _settings(openai_key="")
+    settings.default_provider = "openai"
+    agent = AgentService(settings)
+    assert isinstance(agent.provider, StubProvider)
+
+
+def test_agent_uses_registered_provider_when_default_matches():
+    name = "pytest-default"
+
+    def factory(_settings):
+        return _RecordingProvider()
+
+    try:
+        register_provider(name, factory)
+        settings = _settings()
+        settings.default_provider = name
+        agent = AgentService(settings)
+        assert isinstance(agent.provider, _RecordingProvider)
+    finally:
+        PROVIDERS.pop(name, None)
